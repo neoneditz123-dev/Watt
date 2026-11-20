@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WattWatch | Smart Energy Monitoring System (SDG 7)</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons via CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        eco: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            200: '#a7f3d0',
+                            300: '#6ee7b7',
+                            400: '#34d399',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom subtle scrollbar & transitions */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(16, 185, 129, 0.3);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(16, 185, 129, 0.6);
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            100% { transform: scale(2.2); opacity: 0; }
+        }
+        .live-dot::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 9999px;
+            background-color: #10b981;
+            animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased transition-colors duration-300 selection:bg-emerald-500 selection:text-white">
+
+    <!-- Toast Notification Container (Replaces alert()) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-40 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            <!-- Brand Logo & Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25">
+                    <i data-lucide="zap" class="w-6 h-6 fill-current"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent">
+                            WattWatch
+                        </h1>
+                        <span class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">
+                            <i data-lucide="sun" class="w-3 h-3"></i> SDG 7 Aligned
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Smart Energy Monitoring & Wastage Prevention</p>
+                </div>
+            </div>
+
+            <!-- Right Header Controls: Tariff Calculator, Live Stream Toggle, Theme Toggle -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <!-- Currency & Tariff Input Pill -->
+                <div class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-700">
+                    <select id="currency-select" aria-label="Select Currency" class="bg-transparent text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1">
+                        <option value="₹" selected>₹ INR</option>
+                        <option value="$">$ USD</option>
+                        <option value="€">€ EUR</option>
+                    </select>
+                    <span class="text-slate-300 dark:text-slate-600 mx-1">|</span>
+                    <label for="tariff-input" class="text-xs text-slate-500 dark:text-slate-400 hidden md:inline mr-1">Rate/kWh:</label>
+                    <input type="number" id="tariff-input" value="7.50" step="0.25" min="0.1" max="100"
+                        class="w-14 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-center rounded-lg py-0.5 px-1 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <!-- Simulated Live Feed Toggle -->
+                <button id="live-toggle-btn" class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition cursor-pointer">
+                    <span class="relative flex h-2.5 w-2.5">
+                        <span id="live-pulse" class="live-dot relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span id="live-status-text" class="hidden sm:inline">Live Feed: ON</span>
+                </button>
+
+                <!-- Dark/Light Theme Toggle -->
+                <button id="theme-toggle" aria-label="Toggle Dark Mode" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer">
+                    <i data-lucide="moon" class="w-4 h-4 block dark:hidden"></i>
+                    <i data-lucide="sun" class="w-4 h-4 hidden dark:block text-amber-400"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Top KPI Summary Cards -->
+        <section aria-label="Key Performance Indicators" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- KPI 1: Current Live Power Draw -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition relative overflow-hidden">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Live Power Draw</p>
+                        <div class="mt-2 flex items-baseline gap-1.5">
+                            <span id="kpi-live-kw" class="text-3xl font-extrabold text-slate-900 dark:text-white">3.42</span>
+                            <span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">kW</span>
+                        </div>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                        <i data-lucide="activity" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between text-xs">
+                    <span id="kpi-load-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                        Moderate Load
+                    </span>
+                    <span id="kpi-active-count" class="text-slate-500 dark:text-slate-400">5 of 6 devices active</span>
+                </div>
+            </div>
+
+            <!-- KPI 2: Today's Energy Consumption -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Today's Consumption</p>
+                        <div class="mt-2 flex items-baseline gap-1.5">
+                            <span id="kpi-today-kwh" class="text-3xl font-extrabold text-slate-900 dark:text-white">18.6</span>
+                            <span class="text-sm font-semibold text-teal-600 dark:text-teal-400">kWh</span>
+                        </div>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400">
+                        <i data-lucide="gauge" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between text-xs">
+                    <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                        <i data-lucide="trending-down" class="w-3.5 h-3.5"></i> 11.4% vs yesterday
+                    </span>
+                    <span class="text-slate-400">Target: &lt; 22 kWh</span>
+                </div>
+            </div>
+
+            <!-- KPI 3: Estimated Monthly Cost -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Est. Monthly Cost</p>
+                        <div class="mt-2 flex items-baseline gap-1">
+                            <span id="kpi-currency-symbol" class="text-xl font-bold text-slate-500 dark:text-slate-400">₹</span>
+                            <span id="kpi-monthly-cost" class="text-3xl font-extrabold text-slate-900 dark:text-white">4,185</span>
+                        </div>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                        <i data-lucide="wallet" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between text-xs">
+                    <span class="text-slate-500 dark:text-slate-400">Projected: <strong id="kpi-monthly-kwh" class="text-slate-700 dark:text-slate-200">558 kWh</strong>/mo</span>
+                    <span id="kpi-rate-display" class="text-blue-600 dark:text-blue-400 font-medium">@ ₹7.50/unit</span>
+                </div>
+            </div>
+
+            <!-- KPI 4: Energy Efficiency & Carbon Saved -->
+            <div class="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-5 text-white shadow-md shadow-emerald-600/15 relative overflow-hidden">
+                <div class="flex justify-between items-start relative z-10">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-100">Efficiency & CO₂ Saved</p>
+                        <div class="mt-2 flex items-baseline gap-1.5">
+                            <span id="kpi-saved-pct" class="text-3xl font-extrabold">18.4%</span>
+                            <span class="text-xs font-medium text-emerald-100">wastage cut</span>
+                        </div>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-white/15 backdrop-blur-sm text-white">
+                        <i data-lucide="leaf" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between text-xs text-emerald-50 relative z-10">
+                    <span id="kpi-co2-saved">~94 kg CO₂ prevented/mo</span>
+                    <span class="px-2 py-0.5 rounded-full bg-white/20 font-semibold">SDG 7.3</span>
+                </div>
+                <!-- Decorative background circle -->
+                <div class="absolute -bottom-6 -right-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none"></div>
+            </div>
+        </section>
+
+        <!-- Primary Analytics Grid: Real-Time Chart & Anomaly Alerts -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left 2 Columns: Interactive Power Consumption Line Chart -->
+            <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Power Consumption Trend</span>
+                            <span id="chart-badge" class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">Real-Time (kW)</span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Monitor peak demand hours & baseline standby loads</p>
+                    </div>
+
+                    <!-- Timeframe Selector Buttons -->
+                    <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 self-start">
+                        <button data-timeframe="today" class="timeframe-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm transition cursor-pointer">
+                            Today
+                        </button>
+                        <button data-timeframe="week" class="timeframe-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer">
+                            Week
+                        </button>
+                        <button data-timeframe="month" class="timeframe-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer">
+                            Month
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Responsive Canvas Wrapper -->
+                <div class="relative w-full h-64 sm:h-72">
+                    <canvas id="powerTrendChart"></canvas>
+                </div>
+
+                <!-- Chart Legend / Insights Strip -->
+                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <div class="flex items-center gap-4">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Actual Consumption
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Efficient Baseline
+                        </span>
+                    </div>
+                    <span id="peak-window-note" class="font-medium text-amber-600 dark:text-amber-400">
+                        Peak Tariff Window: 18:00 – 22:00
+                    </span>
+                </div>
+            </div>
+
+            <!-- Right Column: Abnormal Usage & Anomaly Detection Alerts -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-slate-900 dark:text-white">Anomaly Alerts</h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">AI-detected wastage & spikes</p>
+                        </div>
+                    </div>
+                    <span id="alert-count-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300">
+                        3 Active
+                    </span>
+                </div>
+
+                <!-- Dynamic Alerts Container -->
+                <div id="alerts-list" class="space-y-3 flex-1 overflow-y-auto max-h-80 pr-1">
+                    <!-- Rendered dynamically via JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Appliance Breakdown & Smart Recommendations Grid -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Left 7 Columns: Interactive Appliance Control & Breakdown -->
+            <div class="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Appliance Load Control & Breakdown</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Toggle smart plugs to simulate load shedding & see live cost impact</p>
+                    </div>
+                    <button id="eco-mode-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition cursor-pointer self-start sm:self-auto">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Optimize All (Eco Mode)
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                    <!-- Donut Chart -->
+                    <div class="md:col-span-5 flex flex-col items-center justify-center">
+                        <div class="relative w-48 h-48">
+                            <canvas id="applianceDonutChart"></canvas>
+                            <!-- Center Readout -->
+                            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Active Load</span>
+                                <span id="donut-center-kw" class="text-xl font-extrabold text-slate-900 dark:text-white">3.42 kW</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Appliance Switches List -->
+                    <div id="appliance-list" class="md:col-span-7 space-y-2.5">
+                        <!-- Rendered dynamically via JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right 5 Columns: Smart Energy-Saving Recommendations Engine -->
+            <div class="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                                <i data-lucide="lightbulb" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Smart Recommendations</h2>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Tailored actions based on active devices</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Recommendations Container -->
+                    <div id="recommendations-list" class="space-y-3">
+                        <!-- Rendered dynamically via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Potential Monthly Savings Footer Banner -->
+                <div class="mt-5 p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-emerald-800 dark:text-emerald-300">Potential Extra Monthly Savings</p>
+                        <p class="text-[11px] text-emerald-600 dark:text-emerald-400">By applying active recommendations</p>
+                    </div>
+                    <div class="text-right">
+                        <span id="potential-savings-amount" class="text-lg font-extrabold text-emerald-700 dark:text-emerald-300">₹840/mo</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SDG 7 Impact & Sustainability Alignment Section -->
+        <section aria-label="UN Sustainable Development Goal 7 Impact" class="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-teal-500/10 dark:from-amber-950/40 dark:via-emerald-950/40 dark:to-teal-950/40 rounded-2xl p-5 sm:p-6 border border-amber-300/60 dark:border-amber-700/40">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div class="flex items-start gap-4">
+                    <!-- SDG 7 Official Color Emblem -->
+                    <div class="shrink-0 w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 flex flex-col items-center justify-center shadow-md font-extrabold leading-none p-2 text-center">
+                        <span class="text-xl">7</span>
+                        <span class="text-[8px] uppercase tracking-tighter mt-1">Clean Energy</span>
+                    </div>
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                                UN SDG 7 Impact: Affordable and Clean Energy
+                            </h3>
+                            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-400/25 text-amber-800 dark:text-amber-300">
+                                Target 7.3: Double Global Energy Efficiency
+                            </span>
+                        </div>
+                        <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1.5 max-w-3xl leading-relaxed">
+                            WattWatch empowers households and institutions to eliminate invisible standby loads, shift heavy appliances away from fossil-fuel peak grid hours, and reduce unnecessary electricity expenditure—making energy cleaner, greener, and more affordable for everyone.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Live Sustainability Metrics -->
+                <div class="grid grid-cols-3 gap-3 shrink-0">
+                    <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-3 rounded-xl border border-slate-200/70 dark:border-slate-800 text-center">
+                        <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Grid Relief</p>
+                        <p id="sdg-grid-relief" class="text-base sm:text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">-1.2 kW</p>
+                    </div>
+                    <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-3 rounded-xl border border-slate-200/70 dark:border-slate-800 text-center">
+                        <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Trees Equiv.</p>
+                        <p id="sdg-trees" class="text-base sm:text-lg font-extrabold text-teal-600 dark:text-teal-400 mt-0.5">4.5 / yr</p>
+                    </div>
+                    <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-3 rounded-xl border border-slate-200/70 dark:border-slate-800 text-center">
+                        <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Eco Score</p>
+                        <p id="sdg-score" class="text-base sm:text-lg font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">86/100</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- WattWatch Future Lab -->
+        <section id="future-lab" class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/20 p-5">
+            <div class="flex items-center gap-2 mb-2"><i data-lucide="clock" class="w-5 h-5 text-indigo-500"></i><h2 class="text-lg font-bold">Electricity Time Machine</h2></div>
+            <p class="text-sm text-slate-500 mb-4">Explore how a small change could alter your estimated monthly bill.</p>
+            <label class="text-sm font-medium">Daily AC usage reduction: <span id="time-reduction-label">1</span> hour</label>
+            <input id="time-reduction" type="range" min="0" max="5" value="1" step="1" class="w-full my-3" oninput="updateFutureLab()">
+            <div class="grid grid-cols-2 gap-3 mt-3"><div class="rounded-xl bg-white dark:bg-slate-900 p-3"><p class="text-xs text-slate-500">Current projection</p><p id="time-current" class="text-2xl font-bold">—</p></div><div class="rounded-xl bg-white dark:bg-slate-900 p-3"><p class="text-xs text-slate-500">After this change</p><p id="time-new" class="text-2xl font-bold text-emerald-600">—</p></div></div>
+            <p id="time-savings" class="text-sm font-semibold text-emerald-600 mt-3"></p><p class="text-xs text-slate-400 mt-2">Illustrative projection based on appliance assumptions and tariff; not a guarantee.</p>
+          </div>
+          <div class="rounded-2xl border border-sky-200 dark:border-sky-900 bg-sky-50/60 dark:bg-sky-950/20 p-5">
+            <div class="flex items-center gap-2 mb-2"><i data-lucide="git-compare" class="w-5 h-5 text-sky-500"></i><h2 class="text-lg font-bold">Energy Doppelgänger</h2></div><p class="text-sm text-slate-500 mb-4">Compare three hypothetical energy futures.</p>
+            <div class="grid grid-cols-1 gap-3"><div class="rounded-xl bg-white dark:bg-slate-900 p-3"><p class="text-xs text-slate-500">Current lifestyle</p><p id="parallel-current" class="font-bold text-xl">—</p></div><div class="rounded-xl bg-white dark:bg-slate-900 p-3"><p class="text-xs text-slate-500">Eco lifestyle (AC usage −1h/day, geyser usage reduced)</p><p id="parallel-eco" class="font-bold text-xl text-emerald-600">—</p></div><div class="rounded-xl bg-white dark:bg-slate-900 p-3"><p class="text-xs text-slate-500">Efficiency future (AC −2h/day, geyser −0.5h/day, standby avoided)</p><p id="parallel-efficient" class="font-bold text-xl text-sky-600">—</p></div></div>
+            <p class="text-xs text-slate-400 mt-3">These scenarios are estimates, not measured savings or automated controls.</p>
+          </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 border-t border-slate-200 dark:border-slate-800 text-center sm:flex sm:items-center sm:justify-between text-xs text-slate-500 dark:text-slate-400">
+        <p><strong>WattWatch</strong> &mdash; Smart IoT Energy Analytics & Wastage Reduction Platform</p>
+        <p class="mt-1 sm:mt-0">Advancing United Nations Sustainable Development Goal 7 (Affordable &amp; Clean Energy)</p>
+    </footer>
+
+    <!-- Application Logic -->
+    <script>
+        // ==========================================
+        // 1. STATE & MOCK DATA INITIALIZATION
+        // ==========================================
+        const state = {
+            currency: '₹',
+            tariff: 7.50,
+            isLive: true,
+            timeframe: 'today',
+            liveJitter: 0,
+            appliances: [
+                {
+                    id: 'ac',
+                    name: 'HVAC / Split AC (Living Room)',
+                    category: 'Cooling',
+                    watts: 1550,
+                    avgHoursPerDay: 6.5,
+                    active: true,
+                    essential: false,
+                    icon: 'wind',
+                    color: '#10b981', // Emerald
+                    tip: 'Set AC thermostat to 24°C instead of 19°C to cut cooling energy draw by up to 24%.'
+                },
+                {
+                    id: 'heater',
+                    name: 'Electric Water Heater (Geyser)',
+                    category: 'Heating',
+                    watts: 1100,
+                    avgHoursPerDay: 1.5,
+                    active: true,
+                    essential: false,
+                    icon: 'flame',
+                    color: '#f59e0b', // Amber
+                    tip: 'Turn off water heater immediately after morning usage or install a smart timer.'
+                },
+                {
+                    id: 'fridge',
+                    name: 'Smart Inverter Refrigerator',
+                    category: 'Kitchen',
+                    watts: 180,
+                    avgHoursPerDay: 24.0,
+                    active: true,
+                    essential: true,
+                    icon: 'thermometer-snowflake',
+                    color: '#06b6d4', // Cyan
+                    tip: 'Ensure door seals are tight and keep coils dust-free for optimal compressor efficiency.'
+                },
+                {
+                    id: 'electronics',
+                    name: 'Home Office & Entertainment',
+                    category: 'Electronics',
+                    watts: 340,
+                    avgHoursPerDay: 8.0,
+                    active: true,
+                    essential: false,
+                    icon: 'monitor',
+                    color: '#3b82f6', // Blue
+                    tip: 'Eliminate phantom standby power by switching off workstation & TV power strips overnight.'
+                },
+                {
+                    id: 'lighting',
+                    name: 'Indoor & Outdoor LED Lighting',
+                    category: 'Lighting',
+                    watts: 250,
+                    avgHoursPerDay: 6.0,
+                    active: true,
+                    essential: false,
+                    icon: 'lamp',
+                    color: '#8b5cf6', // Violet
+                    tip: 'Utilize natural daylight in common areas and schedule outdoor garden lights off after midnight.'
+                },
+                {
+                    id: 'washer',
+                    name: 'Front-Load Washing Machine',
+                    category: 'Laundry',
+                    watts: 480,
+                    avgHoursPerDay: 1.0,
+                    active: false,
+                    essential: false,
+                    icon: 'waves',
+                    color: '#ec4899', // Pink
+                    tip: 'Run full loads with cold-water wash cycles during off-peak afternoon solar hours.'
+                }
+            ],
+            alerts: [
+                {
+                    id: 'alert-1',
+                    severity: 'high',
+                    title: 'Continuous Peak AC Draw (6+ Hours)',
+                    description: 'Living Room AC has been drawing 1.55 kW continuously since 06:00 AM without compressor cycling.',
+                    targetApplianceId: 'ac',
+                    actionLabel: 'Turn Off AC',
+                    timestamp: '12 mins ago'
+                },
+                {
+                    id: 'alert-2',
+                    severity: 'medium',
+                    title: 'Water Heater Left Idle ON',
+                    description: 'Geyser heating element is active outside normal morning shower window (1.10 kW draw).',
+                    targetApplianceId: 'heater',
+                    actionLabel: 'Switch Off',
+                    timestamp: '28 mins ago'
+                },
+                {
+                    id: 'alert-3',
+                    severity: 'low',
+                    title: 'Phantom Standby Load Detected',
+                    description: 'Home Office & Entertainment hub consumed 1.4 kWh overnight in idle standby mode.',
+                    targetApplianceId: 'electronics',
+                    actionLabel: 'Cut Standby',
+                    timestamp: '2 hours ago'
+                }
+            ],
+            chartData: {
+                today: {
+                    labels: ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'],
+                    actual: [0.85, 0.72, 0.68, 1.45, 2.90, 3.15, 3.42, 3.10, 2.85, 3.95, 4.20, 2.40],
+                    baseline: [0.65, 0.60, 0.58, 1.10, 2.10, 2.30, 2.50, 2.35, 2.20, 3.00, 3.10, 1.80],
+                    unit: 'kW'
+                },
+                week: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    actual: [21.4, 19.8, 22.5, 18.9, 20.1, 24.6, 18.6],
+                    baseline: [18.0, 18.0, 18.0, 18.0, 18.0, 20.0, 17.5],
+                    unit: 'kWh'
+                },
+                month: {
+                    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4 (Est)'],
+                    actual: [154, 146, 139, 119],
+                    baseline: [140, 138, 135, 130],
+                    unit: 'kWh'
+                }
+            }
+        };
+
+        let powerTrendChart = null;
+        let applianceDonutChart = null;
+        let liveInterval = null;
+
+        // ==========================================
+        // 2. HELPER UTILITIES & TOAST NOTIFICATIONS
+        // ==========================================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColors = type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : 'bg-slate-800 text-white border-slate-700';
+
+            toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs sm:text-sm font-medium transform transition-all duration-300 translate-y-2 opacity-0 ${bgColors}`;
+            toast.innerHTML = `
+                <i data-lucide="${type === 'success' ? 'check-circle-2' : 'info'}" class="w-4 h-4 shrink-0"></i>
+                <span>${message}</span>
+            `;
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        function formatNumber(num, decimals = 0) {
+            return num.toLocaleString('en-IN', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        // ==========================================
+        // 3. CORE CALCULATIONS & UI UPDATES
+        // ==========================================
+        function calculateMetrics() {
+            const activeAppliances = state.appliances.filter(a => a.active);
+            const totalWatts = activeAppliances.reduce((sum, a) => sum + a.watts, 0);
+            const liveKw = Math.max(0.05, (totalWatts / 1000) + state.liveJitter);
+
+            // Daily projected kWh based on active appliances' daily duty cycles
+            const dailyKwh = activeAppliances.reduce((sum, a) => sum + ((a.watts / 1000) * a.avgHoursPerDay), 0);
+            const monthlyKwh = dailyKwh * 30;
+            const monthlyCost = monthlyKwh * state.tariff;
+
+            // Compare against a "wasteful baseline" (all 6 appliances running unoptimized = ~26.5 kWh/day)
+            const unoptimizedDailyKwh = 26.5;
+            const savedPct = Math.max(4.2, Math.min(48.0, ((unoptimizedDailyKwh - dailyKwh) / unoptimizedDailyKwh) * 100));
+            const monthlyKwhSaved = Math.max(15, (unoptimizedDailyKwh - dailyKwh) * 30);
+            // ~0.71 kg CO2 per kWh grid emission factor
+            const co2SavedKg = Math.round(monthlyKwhSaved * 0.71);
+
+            return {
+                activeCount: activeAppliances.length,
+                totalCount: state.appliances.length,
+                liveKw,
+                dailyKwh,
+                monthlyKwh,
+                monthlyCost,
+                savedPct,
+                co2SavedKg
+            };
+        }
+
+        function updateDashboard() {
+            const m = calculateMetrics();
+
+            // 1. Update KPI Cards
+            document.getElementById('kpi-live-kw').textContent = m.liveKw.toFixed(2);
+            document.getElementById('donut-center-kw').textContent = `${m.liveKw.toFixed(2)} kW`;
+            document.getElementById('kpi-active-count').textContent = `${m.activeCount} of ${m.totalCount} devices active`;
+
+            const loadBadge = document.getElementById('kpi-load-badge');
+            if (m.liveKw > 3.2) {
+                loadBadge.textContent = 'High Peak Load';
+                loadBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300';
+            } else if (m.liveKw > 1.5) {
+                loadBadge.textContent = 'Moderate Load';
+                loadBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300';
+            } else {
+                loadBadge.textContent = 'Optimal Eco Load';
+                loadBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300';
+            }
+
+            document.getElementById('kpi-today-kwh').textContent = m.dailyKwh.toFixed(1);
+            document.getElementById('kpi-currency-symbol').textContent = state.currency;
+            document.getElementById('kpi-monthly-cost').textContent = formatNumber(Math.round(m.monthlyCost));
+            document.getElementById('kpi-monthly-kwh').textContent = `${Math.round(m.monthlyKwh)} kWh`;
+            document.getElementById('kpi-rate-display').textContent = `@ ${state.currency}${state.tariff.toFixed(2)}/unit`;
+
+            document.getElementById('kpi-saved-pct').textContent = `${m.savedPct.toFixed(1)}%`;
+            document.getElementById('kpi-co2-saved').textContent = `~${m.co2SavedKg} kg CO₂ prevented/mo`;
+
+            // 2. Update SDG 7 Section Metrics
+            const maxPossibleKw = 3.90;
+            const gridRelief = Math.max(0.2, maxPossibleKw - m.liveKw);
+            document.getElementById('sdg-grid-relief').textContent = `-${gridRelief.toFixed(1)} kW`;
+            document.getElementById('sdg-trees').textContent = `${((m.co2SavedKg * 12) / 21).toFixed(1)} / yr`;
+            document.getElementById('sdg-score').textContent = `${Math.min(99, Math.round(62 + m.savedPct))}/100`;
+
+            // 3. Update Donut Chart
+            updateDonutChart();
+
+            // 4. Update Recommendations Engine
+            renderRecommendations();
+        }
+
+
+        // Future Lab scenario calculators (illustrative estimates)
+        function updateFutureLab() {
+          const hours = Number(document.getElementById('time-reduction').value);
+          document.getElementById('time-reduction-label').textContent = hours;
+          const m = calculateMetrics();
+          const ac = state.appliances.find(a => a.id === 'ac');
+          const heater = state.appliances.find(a => a.id === 'heater');
+          const current = m.monthlyCost;
+          const savings = (ac ? ac.watts/1000*hours*30 : 0) * state.tariff;
+          const projected = Math.max(0,current-savings);
+          document.getElementById('time-current').textContent = state.currency + formatNumber(Math.round(current));
+          document.getElementById('time-new').textContent = state.currency + formatNumber(Math.round(projected));
+          document.getElementById('time-savings').textContent = 'Potential difference: ' + state.currency + formatNumber(Math.round(savings)) + '/month';
+          document.getElementById('parallel-current').textContent = state.currency + formatNumber(Math.round(current)) + '/month';
+          const ecoSaving = (ac?ac.watts/1000:0)*30*state.tariff + (heater?heater.watts/1000*0.5*30*state.tariff:0);
+          const efficientSaving = (ac?ac.watts/1000*2*30*state.tariff:0) + (heater?heater.watts/1000*0.5*30*state.tariff:0);
+          document.getElementById('parallel-eco').textContent = state.currency + formatNumber(Math.round(Math.max(0,current-ecoSaving))) + '/month';
+          document.getElementById('parallel-efficient').textContent = state.currency + formatNumber(Math.round(Math.max(0,current-efficientSaving))) + '/month';
+        }
+        document.getElementById('time-reduction').addEventListener('input', updateFutureLab);
+
+        // ==========================================
+        // 4. RENDER APPLIANCES, ALERTS & RECOMMENDATIONS
+        // ==========================================
+        function renderAppliances() {
+            const container = document.getElementById('appliance-list');
+            container.innerHTML = '';
+
+            state.appliances.forEach(app => {
+                const dailyKwh = ((app.watts / 1000) * app.avgHoursPerDay).toFixed(1);
+                const monthlyCost = Math.round(dailyKwh * 30 * state.tariff);
+
+                const card = document.createElement('div');
+                card.className = `flex items-center justify-between p-3 rounded-xl border transition-all ${
+                    app.active
+                        ? 'bg-slate-50/90 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                        : 'bg-slate-50/40 dark:bg-slate-900/40 border-slate-200/50 dark:border-slate-800/60 opacity-65'
+                }`;
+
+                card.innerHTML = `
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background-color: ${app.color}20; color: ${app.color}">
+                            <i data-lucide="${app.icon}" class="w-4 h-4"></i>
+                        </div>
+                        <div class="truncate">
+                            <div class="flex items-center gap-2">
+                                <p class="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">${app.name}</p>
+                            </div>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                                <span class="font-semibold text-slate-700 dark:text-slate-300">${app.watts} W</span> &bull; ~${dailyKwh} kWh/day (${state.currency}${formatNumber(monthlyCost)}/mo)
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Accessible Toggle Switch -->
+                    <button type="button" role="switch" aria-checked="${app.active}" aria-label="Toggle ${app.name}"
+                        onclick="toggleAppliance('${app.id}')"
+                        class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                            app.active ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                        }">
+                        <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            app.active ? 'translate-x-5' : 'translate-x-0'
+                        }"></span>
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        function toggleAppliance(id, forceState = null) {
+            const app = state.appliances.find(a => a.id === id);
+            if (!app) return;
+
+            app.active = forceState !== null ? forceState : !app.active;
+            renderAppliances();
+            updateDashboard();
+        updateFutureLab();
+
+            // Update "Today" chart latest point to reflect immediate change
+            if (state.timeframe === 'today' && powerTrendChart) {
+                const m = calculateMetrics();
+                const dataArr = state.chartData.today.actual;
+                dataArr[dataArr.length - 1] = Number(m.liveKw.toFixed(2));
+                powerTrendChart.update();
+            }
+
+            showToast(`${app.name} turned ${app.active ? 'ON' : 'OFF'}.`, app.active ? 'info' : 'success');
+        }
+
+        function renderAlerts() {
+            const container = document.getElementById('alerts-list');
+            const countBadge = document.getElementById('alert-count-badge');
+            countBadge.textContent = `${state.alerts.length} Active`;
+
+            if (state.alerts.length === 0) {
+                countBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300';
+                container.innerHTML = `
+                    <div class="h-48 flex flex-col items-center justify-center text-center p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-dashed border-emerald-200 dark:border-emerald-800/50">
+                        <i data-lucide="shield-check" class="w-8 h-8 text-emerald-500 mb-2"></i>
+                        <p class="text-sm font-semibold text-slate-800 dark:text-slate-200">Zero Abnormal Usage Detected</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">All connected circuits are operating within optimal SDG 7 efficiency thresholds.</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            container.innerHTML = '';
+            state.alerts.forEach(alert => {
+                const severityStyles = {
+                    high: 'border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/25',
+                    medium: 'border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/25',
+                    low: 'border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/25'
+                };
+                const dotColor = {
+                    high: 'bg-rose-500',
+                    medium: 'bg-amber-500',
+                    low: 'bg-blue-500'
+                };
+
+                const el = document.createElement('div');
+                el.className = `p-3.5 rounded-xl border ${severityStyles[alert.severity]} transition-all`;
+                el.innerHTML = `
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full ${dotColor[alert.severity]} shrink-0"></span>
+                            <h3 class="text-xs font-bold text-slate-900 dark:text-white">${alert.title}</h3>
+                        </div>
+                        <span class="text-[10px] text-slate-400 shrink-0">${alert.timestamp}</span>
+                    </div>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 mt-1.5 leading-relaxed">${alert.description}</p>
+                    <div class="mt-3 flex items-center justify-end gap-2">
+                        <button onclick="dismissAlert('${alert.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition cursor-pointer">
+                            Dismiss
+                        </button>
+                        <button onclick="takeAlertAction('${alert.id}')" class="px-3 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition cursor-pointer">
+                            ${alert.actionLabel}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+            lucide.createIcons();
+        }
+
+        function dismissAlert(alertId) {
+            state.alerts = state.alerts.filter(a => a.id !== alertId);
+            renderAlerts();
+            showToast('Anomaly alert dismissed.', 'info');
+        }
+
+        function takeAlertAction(alertId) {
+            const alert = state.alerts.find(a => a.id === alertId);
+            if (!alert) return;
+
+            if (alert.targetApplianceId) {
+                toggleAppliance(alert.targetApplianceId, false);
+            }
+            state.alerts = state.alerts.filter(a => a.id !== alertId);
+            renderAlerts();
+            showToast(`Action applied: ${alert.actionLabel}! Wastage stopped.`, 'success');
+        }
+
+        function renderRecommendations() {
+            const container = document.getElementById('recommendations-list');
+            const activeNonEssential = state.appliances.filter(a => a.active && !a.essential);
+            let totalPotentialMonthlySavings = 0;
+
+            container.innerHTML = '';
+
+            if (activeNonEssential.length === 0) {
+                container.innerHTML = `
+                    <div class="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 text-center">
+                        <p class="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Maximum Eco Efficiency Reached!</p>
+                        <p class="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">Only essential baseline appliances are currently active.</p>
+                    </div>
+                `;
+                document.getElementById('potential-savings-amount').textContent = `${state.currency}0/mo`;
+                return;
+            }
+
+            // Show top 3 actionable recommendations based on currently active high-draw devices
+            const topDevices = [...activeNonEssential].sort((a, b) => b.watts - a.watts).slice(0, 3);
+
+            topDevices.forEach(app => {
+                // Estimate 25% savings per device via behavior/timer optimization
+                const monthlyKwh = (app.watts / 1000) * app.avgHoursPerDay * 30;
+                const estSavings = Math.round(monthlyKwh * 0.25 * state.tariff);
+                totalPotentialMonthlySavings += estSavings;
+
+                const item = document.createElement('div');
+                item.className = 'p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-start justify-between gap-3';
+                item.innerHTML = `
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs font-bold text-slate-800 dark:text-slate-100">${app.category} Optimization</span>
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                                Save ~${state.currency}${formatNumber(estSavings)}/mo
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${app.tip}</p>
+                    </div>
+                    <button onclick="toggleAppliance('${app.id}', false)" title="Turn off appliance now"
+                        class="shrink-0 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition cursor-pointer">
+                        <i data-lucide="power" class="w-3.5 h-3.5"></i>
+                    </button>
+                `;
+                container.appendChild(item);
+            });
+
+            document.getElementById('potential-savings-amount').textContent = `${state.currency}${formatNumber(totalPotentialMonthlySavings)}/mo`;
+            lucide.createIcons();
+        }
+
+        // ==========================================
+        // 5. CHART.JS INITIALIZATION & UPDATES
+        // ==========================================
+        function initCharts() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const gridColor = isDark ? 'rgba(148, 163, 184, 0.1)' : 'rgba(148, 163, 184, 0.2)';
+            const tickColor = isDark ? '#94a3b8' : '#64748b';
+
+            // 1. Power Trend Line Chart
+            const ctxLine = document.getElementById('powerTrendChart').getContext('2d');
+            const gradient = ctxLine.createLinearGradient(0, 0, 0, 280);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+            const initialData = state.chartData[state.timeframe];
+
+            powerTrendChart = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: initialData.labels,
+                    datasets: [
+                        {
+                            label: `Actual (${initialData.unit})`,
+                            data: initialData.actual,
+                            borderColor: '#10b981',
+                            backgroundColor: gradient,
+                            borderWidth: 2.5,
+                            pointBackgroundColor: '#10b981',
+                            pointBorderColor: '#ffffff',
+                            pointRadius: 3.5,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.38
+                        },
+                        {
+                            label: `Efficient Baseline (${initialData.unit})`,
+                            data: initialData.baseline,
+                            borderColor: '#94a3b8',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            fill: false,
+                            tension: 0.38
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: isDark ? '#0f172a' : '#ffffff',
+                            titleColor: isDark ? '#f8fafc' : '#0f172a',
+                            bodyColor: isDark ? '#cbd5e1' : '#334155',
+                            borderColor: isDark ? '#334155' : '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 10,
+                            cornerRadius: 10
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: tickColor, font: { size: 11 } }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: gridColor },
+                            ticks: {
+                                color: tickColor,
+                                font: { size: 11 },
+                                callback: (val) => `${val} ${state.chartData[state.timeframe].unit}`
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. Appliance Breakdown Donut Chart
+            const ctxDonut = document.getElementById('applianceDonutChart').getContext('2d');
+            applianceDonutChart = new Chart(ctxDonut, {
+                type: 'doughnut',
+                data: {
+                    labels: state.appliances.map(a => a.category),
+                    datasets: [{
+                        data: state.appliances.map(a => a.active ? a.watts : 0),
+                        backgroundColor: state.appliances.map(a => a.color),
+                        borderWidth: 2,
+                        borderColor: isDark ? '#0f172a' : '#ffffff',
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '72%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.label}: ${ctx.raw} W`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateDonutChart() {
+            if (!applianceDonutChart) return;
+            const isDark = document.documentElement.classList.contains('dark');
+            applianceDonutChart.data.datasets[0].data = state.appliances.map(a => a.active ? a.watts : 0);
+            applianceDonutChart.data.datasets[0].borderColor = isDark ? '#0f172a' : '#ffffff';
+            applianceDonutChart.update();
+        }
+
+        function updateChartTheme() {
+            if (!powerTrendChart) return;
+            const isDark = document.documentElement.classList.contains('dark');
+            const gridColor = isDark ? 'rgba(148, 163, 184, 0.1)' : 'rgba(148, 163, 184, 0.2)';
+            const tickColor = isDark ? '#94a3b8' : '#64748b';
+
+            powerTrendChart.options.scales.x.ticks.color = tickColor;
+            powerTrendChart.options.scales.y.ticks.color = tickColor;
+            powerTrendChart.options.scales.y.grid.color = gridColor;
+            powerTrendChart.options.plugins.tooltip.backgroundColor = isDark ? '#0f172a' : '#ffffff';
+            powerTrendChart.options.plugins.tooltip.titleColor = isDark ? '#f8fafc' : '#0f172a';
+            powerTrendChart.options.plugins.tooltip.bodyColor = isDark ? '#cbd5e1' : '#334155';
+            powerTrendChart.options.plugins.tooltip.borderColor = isDark ? '#334155' : '#e2e8f0';
+            powerTrendChart.update();
+
+            updateDonutChart();
+        }
+
+        // ==========================================
+        // 6. EVENT LISTENERS & LIVE SIMULATION LOOP
+        // ==========================================
+        function setupEventListeners() {
+            // Currency & Tariff Rate Inputs
+            document.getElementById('currency-select').addEventListener('change', (e) => {
+                state.currency = e.target.value;
+                // Adjust default reasonable rate when switching currency
+                const rateInput = document.getElementById('tariff-input');
+                if (state.currency === '₹' && parseFloat(rateInput.value) < 1) {
+                    rateInput.value = '7.50';
+                    state.tariff = 7.50;
+                } else if ((state.currency === '$' || state.currency === '€') && parseFloat(rateInput.value) > 2) {
+                    rateInput.value = '0.16';
+                    state.tariff = 0.16;
+                }
+                renderAppliances();
+                updateDashboard();
+            });
+
+            document.getElementById('tariff-input').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val > 0) {
+                    state.tariff = val;
+                    renderAppliances();
+                    updateDashboard();
+                }
+            });
+
+            // Timeframe Selector Buttons
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.timeframe-btn').forEach(b => {
+                        b.className = 'timeframe-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer';
+                    });
+                    btn.className = 'timeframe-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm transition cursor-pointer';
+
+                    state.timeframe = btn.dataset.timeframe;
+                    const tfData = state.chartData[state.timeframe];
+
+                    document.getElementById('chart-badge').textContent =
+                        state.timeframe === 'today' ? 'Real-Time (kW)' :
+                        state.timeframe === 'week' ? 'Daily Totals (kWh)' : 'Weekly Totals (kWh)';
+
+                    powerTrendChart.data.labels = tfData.labels;
+                    powerTrendChart.data.datasets[0].data = tfData.actual;
+                    powerTrendChart.data.datasets[0].label = `Actual (${tfData.unit})`;
+                    powerTrendChart.data.datasets[1].data = tfData.baseline;
+                    powerTrendChart.data.datasets[1].label = `Efficient Baseline (${tfData.unit})`;
+                    powerTrendChart.update();
+                });
+            });
+
+            // Live Feed Toggle
+            document.getElementById('live-toggle-btn').addEventListener('click', () => {
+                state.isLive = !state.isLive;
+                const statusText = document.getElementById('live-status-text');
+                const pulseEl = document.getElementById('live-pulse');
+
+                if (state.isLive) {
+                    statusText.textContent = 'Live Feed: ON';
+                    pulseEl.classList.add('live-dot', 'bg-emerald-500');
+                    pulseEl.classList.remove('bg-slate-400');
+                    startLiveSimulation();
+                    showToast('Real-time IoT meter stream resumed.', 'success');
+                } else {
+                    statusText.textContent = 'Live Feed: PAUSED';
+                    pulseEl.classList.remove('live-dot', 'bg-emerald-500');
+                    pulseEl.classList.add('bg-slate-400');
+                    clearInterval(liveInterval);
+                    showToast('Real-time meter stream paused.', 'info');
+                }
+            });
+
+            // Eco Mode Button (Turns off non-essential heavy loads)
+            document.getElementById('eco-mode-btn').addEventListener('click', () => {
+                state.appliances.forEach(app => {
+                    if (!app.essential) app.active = false;
+                });
+                renderAppliances();
+                updateDashboard();
+                showToast('Eco Mode Activated! Non-essential heavy loads powered down.', 'success');
+            });
+
+            // Dark/Light Theme Toggle
+            document.getElementById('theme-toggle').addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                updateChartTheme();
+            });
+        }
+
+        function startLiveSimulation() {
+            clearInterval(liveInterval);
+            liveInterval = setInterval(() => {
+                if (!state.isLive) return;
+                // Subtle realistic sensor fluctuation (+/- 0.08 kW)
+                state.liveJitter = (Math.random() - 0.5) * 0.14;
+                const m = calculateMetrics();
+                document.getElementById('kpi-live-kw').textContent = m.liveKw.toFixed(2);
+                document.getElementById('donut-center-kw').textContent = `${m.liveKw.toFixed(2)} kW`;
+
+                if (state.timeframe === 'today' && powerTrendChart) {
+                    const arr = state.chartData.today.actual;
+                    arr[arr.length - 1] = Number(m.liveKw.toFixed(2));
+                    powerTrendChart.update('none');
+                }
+            }, 2500);
+        }
+
+        // ==========================================
+        // 7. BOOTSTRAP ON WINDOW LOAD
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            renderAppliances();
+            renderAlerts();
+            initCharts();
+            updateDashboard();
+            updateFutureLab();
+            setupEventListeners();
+            startLiveSimulation();
+        });
+    </script>
+</body>
+</html>
